@@ -86,7 +86,16 @@ module EvilSeed
         end
       else
         puts("  # #{relation.count}") if verbose
-        relation.in_batches do |relation|
+        if model_class.primary_key
+          relation.in_batches do |relation|
+            attrs = fetch_attributes(relation)
+            puts(" -- dumped #{attrs.size}") if verbose
+            attrs.each do |attributes|
+              next unless check_limits!
+              dump_record!(attributes)
+            end
+          end
+        else
           attrs = fetch_attributes(relation)
           puts(" -- dumped #{attrs.size}") if verbose
           attrs.each do |attributes|
@@ -148,6 +157,7 @@ module EvilSeed
     # @return [Array<Hash{String => String, Integer, Float, Boolean, nil}>]
     def fetch_attributes(relation)
       relation.pluck(*model_class.column_names).map do |row|
+        row = [row] if model_class.column_names.size == 1
         Hash[model_class.column_names.zip(row)]
       end
     end
