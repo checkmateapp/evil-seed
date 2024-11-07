@@ -86,7 +86,7 @@ module EvilSeed
         end
       else
         puts("  # #{relation.count}") if verbose
-        if model_class.primary_key
+        if model_class.primary_key && !model_class.in?([MenuItemModifier, NestedModifierMapping])
           relation.in_batches do |relation|
             attrs = fetch_attributes(relation)
             puts(" -- dumped #{attrs.size}") if verbose
