@@ -23,13 +23,37 @@ module EvilSeed
       # Exclude some of associations from the dump
       # @param association_patterns Array<String, Regex> Patterns to exclude associated models from dump
       def exclude(*association_patterns)
-        @exclusions += association_patterns
+        association_patterns.each do |pattern|
+          case pattern
+          when String, Regexp
+            @exclusions << pattern
+          else
+            path_prefix = model.constantize.model_name.singular
+            @inclusions += compile_patterns(pattern, prefix: path_prefix).map { |p| Regexp.new(/\A#{p}\z/) }
+          end
+        end
       end
 
       # Include some excluded associations back to the dump
       # @param association_patterns Array<String, Regex> Patterns to exclude associated models from dump
       def include(*association_patterns)
-        @inclusions += association_patterns
+        association_patterns.each do |pattern|
+          case pattern
+          when String, Regexp
+            @inclusions << pattern
+          else
+            path_prefix = model.constantize.model_name.singular
+            @inclusions += compile_patterns(pattern, prefix: path_prefix).map { |p| Regexp.new(/\A#{p}\z/) }
+          end
+        end
+      end
+
+      def exclude_has_relations
+        @excluded_has_relations = :exclude_has_relations
+      end
+
+      def exclude_optional_belongs_to
+        @excluded_optional_belongs_to = :exclude_optional_belongs_to
       end
 
       # Limit number of records in all (if pattern is not provided) or given  associations to include into dump
@@ -54,11 +78,48 @@ module EvilSeed
       end
 
       def excluded?(association_path)
-        exclusions.any? { |exclusion| association_path.match(exclusion) } #.match(association_path) }
+        exclusions.find { |exclusion| association_path.match(exclusion) } #.match(association_path) }
       end
 
       def included?(association_path)
-        inclusions.any? { |inclusion| association_path.match(inclusion) } #.match(association_path) }
+        inclusions.find { |inclusion| association_path.match(inclusion) } #.match(association_path) }
+      end
+
+      def excluded_has_relations?
+        @excluded_has_relations
+      end
+
+      def excluded_optional_belongs_to?
+        @excluded_optional_belongs_to
+      end
+
+      private
+
+      def compile_patterns(pattern, prefix: "")
+        case pattern
+        when String, Symbol
+          ["#{prefix}(?:\\.#{pattern.to_s})?"]
+        when Regexp
+          ["#{prefix}(?:\\.(?:#{pattern.source}))?"]
+        when Array
+          pattern.map { |p| compile_patterns(p, prefix: prefix) }.flatten
+        when Hash
+          pattern.map do |k, v|
+            next nil unless v
+            subpatterns = compile_patterns(v)
+            next "#{prefix}(?:\\.#{k})?" if subpatterns.empty?
+
+            subpatterns.map do |p|
+              "#{prefix}(?:\\.#{k}#{p})?"
+            end
+          end.compact.flatten
+        when false, nil
+          nil
+        when true
+          [prefix]
+        else
+          raise ArgumentError, "Unknown pattern type: #{pattern.class} for #{pattern.inspect}"
+        end
       end
     end
   end
